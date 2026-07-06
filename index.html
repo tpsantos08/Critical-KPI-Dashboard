@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIK · Critical KPI Dashboard</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#f0f0f0;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px}
+#aik{background:#fff;color:#222;padding:28px 32px 40px;border-radius:12px;width:100%;max-width:920px;box-shadow:0 1px 6px rgba(0,0,0,0.08)}
+.loading{text-align:center;padding:60px 20px;color:#888;font-size:14px;line-height:1.6}
+.loading .spinner{display:inline-block;width:20px;height:20px;border:2px solid #ddd;border-top-color:#1a2f5e;border-radius:50%;animation:spin .6s linear infinite;margin-bottom:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;padding-bottom:18px;border-bottom:2.5px solid #1a2f5e}
+.title{font-size:22px;font-weight:800;letter-spacing:0.06em;color:#1a2f5e;text-transform:uppercase;line-height:1.1}
+.subtitle{font-size:12px;color:#888;margin-top:4px}
+.hright{text-align:right;font-size:12px;color:#aaa}
+.hright span{color:#555;font-weight:600}
+.controls{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:13px 16px;background:#f8f8f8;border:1px solid rgba(0,0,0,0.08);border-radius:8px;flex-wrap:wrap}
+.ctl-label{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.07em;flex-shrink:0}
+#matchSel{background:#fff;border:1px solid rgba(0,0,0,0.14);color:#222;font-size:13px;padding:7px 11px;border-radius:6px;cursor:pointer;flex:1;min-width:200px;max-width:380px;font-weight:500}
+.match-info{display:flex;gap:24px;margin-left:auto}
+.mi-item{display:flex;flex-direction:column;gap:1px;align-items:flex-end}
+.mi-label{color:#ccc;font-size:10px;text-transform:uppercase;letter-spacing:0.06em}
+.mi-val{color:#444;font-size:13px;font-weight:600}
+.legend{display:flex;align-items:center;gap:16px;margin-bottom:18px;font-size:11px;color:#888;flex-wrap:wrap}
+.ld-item{display:flex;align-items:center;gap:5px}
+.ld{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.sep{width:1px;height:14px;background:rgba(0,0,0,0.1)}
+.sec-head{font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#1a2f5e;margin:20px 0 6px;padding-bottom:6px;border-bottom:1.5px solid rgba(26,47,94,0.3)}
+.kpi-row{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);min-height:78px}
+.kpi-row:last-child{border-bottom:none}
+.kpi-info{width:210px;flex-shrink:0;padding-right:16px}
+.kpi-name{font-size:14px;font-weight:700;color:#333;margin-bottom:5px}
+.kpi-vals{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kpi-val{font-family:'Courier New',monospace;font-size:22px;font-weight:700;line-height:1}
+.kpi-avg-lbl{font-family:'Courier New',monospace;font-size:11px;color:#bbb}
+.rank-pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;font-family:'Courier New',monospace;border:1.5px solid currentColor}
+.kpi-wrap{flex:1;height:78px;position:relative;min-width:0}
+canvas.dp{width:100%;height:78px;display:block}
+</style>
+</head>
+<body>
+<div id="aik">
+  <div class="loading" id="loadMsg"><div class="spinner"></div><br>Loading Excel data…</div>
+  <div id="dashboard" style="display:none">
+    <div class="header">
+      <div>
+        <div class="title">Critical KPI Dashboard</div>
+        <div class="subtitle" id="subtitleText">Season 2026</div>
+      </div>
+      <div class="hright">
+        <div>Dot colour = rank vs league avg</div>
+      </div>
+    </div>
+    <div class="controls">
+      <span class="ctl-label">Match</span>
+      <select id="matchSel"></select>
+      <div class="match-info">
+        <div class="mi-item"><span class="mi-label">Opponent</span><span class="mi-val" id="iOpp">—</span></div>
+        <div class="mi-item"><span class="mi-label">Date</span><span class="mi-val" id="iDate">—</span></div>
+        <div class="mi-item"><span class="mi-label">Result</span><span class="mi-val" id="iRes">—</span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span style="color:#aaa;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;flex-shrink:0">League rank</span>
+      <span class="ld-item"><span class="ld" style="background:#0000FF"></span>1–4</span>
+      <span class="ld-item"><span class="ld" style="background:#00BF00"></span>5–8</span>
+      <span class="ld-item"><span class="ld" style="background:#F2DD41"></span>9–12</span>
+      <span class="ld-item"><span class="ld" style="background:#FF0000"></span>13–16</span>
+      <span class="sep"></span>
+      <span class="ld-item"><svg width="34" height="14" style="vertical-align:middle"><circle cx="7" cy="7" r="4.5" fill="rgba(90,90,90,0.25)"/><circle cx="25" cy="7" r="7" fill="#0000FF"/></svg>other / selected</span>
+      <span class="ld-item"><svg width="16" height="14" style="vertical-align:middle"><line x1="8" y1="0" x2="8" y2="14" stroke="#bbb" stroke-width="2" stroke-dasharray="3,3"/></svg>season avg</span>
+    </div>
+    <div class="sec-head">Offensive</div>
+    <div id="rowsOff"></div>
+    <div class="sec-head">Defensive</div>
+    <div id="rowsDef"></div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIGURATION — edit paths and KPIs here
+// ══════════════════════════════════════════════════════════════════════════════
+
+const MATCH_FILE  = 'data/6_KPI_Match_by_match.xlsx';
+const LEAGUE_FILE = 'data/6_KPI_League.xlsx';
+const LEAGUE_SHEET = 'data'; // sheet name inside the league file
+
+const KPIS_OFFENSIVE = [
+  { key: 'xG Difference',             label: 'xG Difference',         hb: true,  dec: 2, inv: false },
+  { key: 'Ball Progression',          label: 'Ball Progression',      hb: true,  dec: 0, inv: false },
+  { key: 'Breaking Opponent Defence', label: 'Breaking Opp. Defence', hb: true,  dec: 0, inv: false }
+];
+const KPIS_DEFENSIVE = [
+  { key: 'Defensive Ball Control',               label: 'Defensive Ball Control', hb: true,  dec: 0, inv: false },
+  { key: 'Critical Ball Loss Number',            label: 'Critical Ball Losses',   hb: false, dec: 0, inv: true  },
+  { key: 'Offensive Ball Wins (from Defenders)', label: 'Offensive Ball Wins',    hb: true,  dec: 0, inv: false }
+];
+
+// ── Rank colours ─────────────────────────────────────────────────────────────
+const RANK_DOT  = ['#0000FF','#0000FF','#0000FF','#0000FF','#00BF00','#00BF00','#00BF00','#00BF00','#F2DD41','#F2DD41','#F2DD41','#F2DD41','#FF0000','#FF0000','#FF0000','#FF0000'];
+const RANK_TEXT = ['#0000FF','#0000FF','#0000FF','#0000FF','#00BF00','#00BF00','#00BF00','#00BF00','#b8a000','#b8a000','#b8a000','#b8a000','#FF0000','#FF0000','#FF0000','#FF0000'];
+const RANK_BG   = ['rgba(0,0,255,0.1)','rgba(0,0,255,0.1)','rgba(0,0,255,0.1)','rgba(0,0,255,0.1)','rgba(0,191,0,0.1)','rgba(0,191,0,0.1)','rgba(0,191,0,0.1)','rgba(0,191,0,0.1)','rgba(242,221,65,0.15)','rgba(242,221,65,0.15)','rgba(242,221,65,0.15)','rgba(242,221,65,0.15)','rgba(255,0,0,0.1)','rgba(255,0,0,0.1)','rgba(255,0,0,0.1)','rgba(255,0,0,0.1)'];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DATA LOADING — reads .xlsx via SheetJS
+// ══════════════════════════════════════════════════════════════════════════════
+
+let MD = [], LD = [];
+const CVS = {};
+
+async function fetchXlsx(url) {
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  return XLSX.read(buf, { type: 'array' });
+}
+
+function parseResult(teamStr) {
+  // "AIK Solna (H) 0:2" → "H 0–2"
+  const m = teamStr.match(/\(([HA])\)\s*(\d+):(\d+)/);
+  if (!m) return '—';
+  return m[1] + ' ' + m[2] + '–' + m[3];
+}
+
+function parseDate(raw) {
+  if (!raw) return '—';
+  if (typeof raw === 'number') {
+    // Excel serial date
+    const d = XLSX.SSF.parse_date_code(raw);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return d.d + ' ' + months[d.m - 1] + ' ' + d.y;
+  }
+  // String like "22.02.2026"
+  const p = String(raw).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (p) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return parseInt(p[1]) + ' ' + months[parseInt(p[2]) - 1] + ' ' + p[3];
+  }
+  return String(raw);
+}
+
+async function loadData() {
+  try {
+    const [mWb, lWb] = await Promise.all([
+      fetchXlsx(MATCH_FILE),
+      fetchXlsx(LEAGUE_FILE)
+    ]);
+
+    // Parse match data (first sheet)
+    const mSheet = mWb.Sheets[mWb.SheetNames[0]];
+    const mRows = XLSX.utils.sheet_to_json(mSheet);
+
+    MD = mRows.map(r => ({
+      matchday:   String(r['Matchday'] || '').replace(/^Matchday\s*/i, ''),
+      opponent:   r['Opposition'] || '—',
+      date:       parseDate(r['Date']),
+      result:     parseResult(r['Team'] || ''),
+      ...Object.fromEntries(
+        [...KPIS_OFFENSIVE, ...KPIS_DEFENSIVE].map(k => [k.key, r[k.key] ?? null])
+      )
+    }));
+
+    // Parse league data (named sheet)
+    const lSheet = lWb.Sheets[LEAGUE_SHEET] || lWb.Sheets[lWb.SheetNames[0]];
+    const lRows = XLSX.utils.sheet_to_json(lSheet);
+
+    LD = lRows.map(r => ({
+      team: r['Team'] || '—',
+      ...Object.fromEntries(
+        [...KPIS_OFFENSIVE, ...KPIS_DEFENSIVE].map(k => [k.key, r[k.key] ?? null])
+      )
+    }));
+
+    document.getElementById('loadMsg').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('subtitleText').textContent =
+      'Season 2026 · ' + MD.length + ' matches · ' + LD.length + ' league teams';
+    init();
+  } catch (e) {
+    document.getElementById('loadMsg').innerHTML =
+      '<b>Error loading Excel files</b><br>' +
+      'Make sure these files exist:<br>' +
+      '<code>' + MATCH_FILE + '</code><br>' +
+      '<code>' + LEAGUE_FILE + '</code><br><br>' +
+      '<small style="color:#c00">' + e.message + '</small>';
+    console.error(e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD ENGINE (same as before)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function getrank(v, key, hb) {
+  const vs = LD.map(t => t[key]).filter(x => x != null);
+  return Math.min((hb ? vs.filter(x => x > v) : vs.filter(x => x < v)).length + 1, 16);
+}
+function getavg(key) {
+  const vs = MD.map(m => m[key]).filter(x => x != null);
+  return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : 0;
+}
+function fmt(v, d) { return v == null ? '—' : Number(v).toFixed(d); }
+
+function draw(canvas, kpi, mi) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth || 500, H = canvas.clientHeight || 78;
+  if (canvas.width !== Math.round(W * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
+  const ctx = canvas.getContext('2d'); ctx.save(); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+  const key = kpi.key, inv = kpi.inv;
+  const mv = MD.map(m => m[key]).filter(x => x != null);
+  const lv = LD.map(t => t[key]).filter(x => x != null);
+  const all = [...mv, ...lv]; if (!all.length) { ctx.restore(); return; }
+  const mn = Math.min(...all), mx = Math.max(...all), rng = mx === mn ? 1 : mx - mn, pad = rng * 0.06;
+  const lo = mn - pad, hi = mx + pad;
+  const ML = 10, MR = 10, MT = 8, MB = 18, pW = W - ML - MR;
+  const midY = MT + (H - MT - MB) * 0.5;
+  const cx = v => inv ? ML + ((hi - v) / (hi - lo)) * pW : ML + ((v - lo) / (hi - lo)) * pW;
+  ctx.beginPath(); ctx.moveTo(ML, midY); ctx.lineTo(W - MR, midY);
+  ctx.strokeStyle = 'rgba(0,0,0,0.09)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.font = "10px 'Courier New',monospace"; ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.textAlign = 'left'; ctx.fillText(inv ? fmt(mx, kpi.dec) : fmt(mn, kpi.dec), ML, H - 2);
+  ctx.textAlign = 'right'; ctx.fillText(inv ? fmt(mn, kpi.dec) : fmt(mx, kpi.dec), W - MR, H - 2);
+  const sa = getavg(key), ax = cx(sa);
+  ctx.save(); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(ax, MT); ctx.lineTo(ax, midY + 10);
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  for (let i = 0; i < MD.length; i++) {
+    if (i === mi) continue; const v = MD[i][key]; if (v == null) continue;
+    ctx.beginPath(); ctx.arc(cx(v), midY, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(90,90,90,0.22)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.06)'; ctx.lineWidth = 0.5; ctx.stroke();
+  }
+  const sv = MD[mi][key];
+  if (sv != null) {
+    const r = getrank(sv, key, kpi.hb), col = RANK_DOT[r - 1], x = cx(sv);
+    ctx.beginPath(); ctx.arc(x, midY, 9, 0, Math.PI * 2);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function buildSection(kpis, cid) {
+  const c = document.getElementById(cid); c.innerHTML = '';
+  for (const kpi of kpis) {
+    const sk = kpi.key.replace(/[^a-z0-9]/gi, '_');
+    const row = document.createElement('div'); row.className = 'kpi-row';
+    row.innerHTML = '<div class="kpi-info"><div class="kpi-name">' + kpi.label +
+      '</div><div class="kpi-vals"><span class="kpi-val" id="v_' + sk +
+      '">—</span><span class="kpi-avg-lbl" id="a_' + sk +
+      '">avg —</span><span class="rank-pill" id="p_' + sk +
+      '"></span></div></div><div class="kpi-wrap"><canvas class="dp" role="img" aria-label="Dot plot for ' +
+      kpi.label + '"></canvas></div>';
+    c.appendChild(row); CVS[kpi.key] = row.querySelector('canvas');
+  }
+}
+
+function render(mi) {
+  const m = MD[mi];
+  document.getElementById('iOpp').textContent = m.opponent;
+  document.getElementById('iDate').textContent = m.date;
+  document.getElementById('iRes').textContent = m.result;
+  for (const kpi of [...KPIS_OFFENSIVE, ...KPIS_DEFENSIVE]) {
+    const sk = kpi.key.replace(/[^a-z0-9]/gi, '_'), sv = m[kpi.key], sa = getavg(kpi.key);
+    const r = sv != null ? getrank(sv, kpi.key, kpi.hb) : null;
+    const col = r != null ? RANK_TEXT[r - 1] : '#bbb';
+    const bg  = r != null ? RANK_BG[r - 1]   : 'transparent';
+    const ve = document.getElementById('v_' + sk);
+    if (ve) { ve.textContent = fmt(sv, kpi.dec); ve.style.color = col; }
+    const ae = document.getElementById('a_' + sk);
+    if (ae) ae.textContent = 'avg ' + fmt(sa, kpi.dec);
+    const pe = document.getElementById('p_' + sk);
+    if (pe && r != null) { pe.textContent = '#' + r; pe.style.color = col; pe.style.background = bg; }
+    const cv = CVS[kpi.key];
+    if (cv) requestAnimationFrame(() => draw(cv, kpi, mi));
+  }
+}
+
+function init() {
+  buildSection(KPIS_OFFENSIVE, 'rowsOff');
+  buildSection(KPIS_DEFENSIVE, 'rowsDef');
+  const sel = document.getElementById('matchSel'); sel.innerHTML = '';
+  MD.forEach((m, i) => {
+    const o = document.createElement('option'); o.value = i;
+    o.textContent = m.matchday + '  ·  ' + m.opponent + '  ·  ' + m.result;
+    sel.appendChild(o);
+  });
+  sel.value = MD.length - 1;
+  sel.addEventListener('change', e => render(+e.target.value));
+  window.addEventListener('resize', () => render(+sel.value));
+  render(MD.length - 1);
+}
+
+loadData();
+</script>
+</body>
+</html>
